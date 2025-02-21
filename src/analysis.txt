@@ -1,0 +1,10 @@
+In the obtained image, we can observe the results of the word embeddings. As we have seen, words with similar 
+meanings should appear reasonably close together, while those with opposite meanings should be very far apart.
+Although most words, especially in the central part of the image, are illegible, several similarities can be 
+distinguished, verifying the correct functioning of the model. For example, around the point (-4, 2.5), we 
+find three words with almost identical embeddings (profit, amount, free), which makes a lot of sense. Another 
+example can be found at the point (2, 2.5) with (ideas, theory, belief) notably close to each other.
+We also find several examples of word pairs in their singular and plural forms or even with different spelling
+variations. These include (law, laws), (labor, labour), and (organization, organisation).
+Finally, it can also be observed that words with distant embeddings have very different meanings. For instance,
+(anthropologists, sans) appear at opposite extremes of the y-axis.
