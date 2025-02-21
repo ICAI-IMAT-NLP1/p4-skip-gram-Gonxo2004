@@ -68,23 +68,11 @@ def subsample_words(words: List[str], vocab_to_int: Dict[str, int], threshold: f
         Dict[str, float]: Dictionary associating each word with its frequency.
     """
 
-    # Compute word frequencies
-    freqs = {}
-    int_words = [vocab_to_int[word] for word in words if word in vocab_to_int]
-
-    for word in words:
-        freqs[word] = freqs.get(word, 0) + 1
+    freqs: Dict[str,float] = {word: words.count(word) / len(words) for word in set(words)}
     
-    total_words = len(words)
-    for word in freqs:
-        freqs[word] /= total_words  
-
-    # Compute subsampling probabilities
-    probs = {word: 1 - torch.sqrt(torch.tensor(threshold / freqs[word])) 
-             for word in freqs if freqs[word] > threshold}
-
-    # Apply subsampling
-    train_words = [vocab_to_int[word] for word in words if word in vocab_to_int and torch.rand(1).item() > probs.get(word, 0)]
+    probs: Dict[str, float] = {word: 1 - torch.sqrt(torch.tensor(threshold / freq)) for word, freq in freqs.items() if freq > threshold}
+    
+    train_words: List[int] = [vocab_to_int[word] for word in words if word in vocab_to_int and torch.rand(1).item() > probs.get(word, 0)]
 
     return train_words, freqs
 
