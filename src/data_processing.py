@@ -2,6 +2,8 @@ from typing import List, Tuple, Dict, Generator
 from collections import Counter
 import torch
 
+
+
 try:
     from src.utils import tokenize
 except ImportError:
@@ -22,8 +24,7 @@ def load_and_preprocess_data(infile: str) -> List[str]:
         text = file.read()  # Read the entire file
 
     # Preprocess and tokenize the text
-    # TODO
-    tokens: List[str] = None
+    tokens: List[str] = tokenize(text)
 
     return tokens
 
@@ -38,19 +39,16 @@ def create_lookup_tables(words: List[str]) -> Tuple[Dict[str, int], Dict[int, st
         A tuple containing two dictionaries. The first dictionary maps words to integers (vocab_to_int),
         and the second maps integers to words (int_to_vocab).
     """
-    # TODO
-    word_counts: Counter = None
-    # Sorting the words from most to least frequent in text occurrence.
-    sorted_vocab: List[int] = None
-    
-    # Create int_to_vocab and vocab_to_int dictionaries.
-    int_to_vocab: Dict[int, str] = None
-    vocab_to_int: Dict[str, int] = None
+    word_counts: Counter = Counter(words)    
+
+    vocab_to_int: Dict[str, int] = {word[0]: i for i, word in enumerate(word_counts.items())}
+    int_to_vocab: Dict[int, str] = {i: word for word, i in vocab_to_int.items()}
+
 
     return vocab_to_int, int_to_vocab
 
 
-def subsample_words(words: List[str], vocab_to_int: Dict[str, int], threshold: float = 1e-5) -> Tuple[List[int], Dict[str, float]]:
+def subsample_words(words: List[str], vocab_to_int: Dict[str, int], threshold: float = 1e-5):
     """
     Perform subsampling on a list of word integers using PyTorch, aiming to reduce the 
     presence of frequent words according to Mikolov's subsampling technique. This method 
@@ -69,12 +67,24 @@ def subsample_words(words: List[str], vocab_to_int: Dict[str, int], threshold: f
         List[int]: A list of integers representing the subsampled words, where some high-frequency words may be removed.
         Dict[str, float]: Dictionary associating each word with its frequency.
     """
-    # TODO
-    # Convert words to integers
-    int_words: List[int] = None
+
+    # Compute word frequencies
+    freqs = {}
+    int_words = [vocab_to_int[word] for word in words if word in vocab_to_int]
+
+    for word in words:
+        freqs[word] = freqs.get(word, 0) + 1
     
-    freqs: Dict[str, float] = None
-    train_words: List[str] = None
+    total_words = len(words)
+    for word in freqs:
+        freqs[word] /= total_words  
+
+    # Compute subsampling probabilities
+    probs = {word: 1 - torch.sqrt(torch.tensor(threshold / freqs[word])) 
+             for word in freqs if freqs[word] > threshold}
+
+    # Apply subsampling
+    train_words = [vocab_to_int[word] for word in words if word in vocab_to_int and torch.rand(1).item() > probs.get(word, 0)]
 
     return train_words, freqs
 
@@ -90,12 +100,20 @@ def get_target(words: List[str], idx: int, window_size: int = 5) -> List[str]:
     Returns:
         List[str]: A list of words selected randomly within the window around the target word.
     """
-    # TODO
-    target_words: List[str] = None
+    random_window: int = torch.randint(1,window_size + 1,(1,)).item()
+
+    if idx - random_window >= 0 and idx + random_window + 1 <= len(words):
+        target_words: List[str] = words[ idx - random_window : idx + random_window + 1]
+    elif idx - random_window < 0:
+        target_words: List[str] = words[0: idx + random_window + 1]
+    elif idx + random_window + 1 > len(words):
+        target_words: List[str] = words[ idx - random_window : len(words)]
+
+    target_words.remove(words[idx])
 
     return target_words
 
-def get_batches(words: List[int], batch_size: int, window_size: int = 5) -> Generator[Tuple[List[int], List[int]]]:
+def get_batches(words: List[int], batch_size: int, window_size: int = 5):
     """Generate batches of word pairs for training.
 
     This function creates a generator that yields tuples of (inputs, targets),
@@ -114,10 +132,20 @@ def get_batches(words: List[int], batch_size: int, window_size: int = 5) -> Gene
         - The second list contains the corresponding target context words.
     """
 
-    # TODO
     for idx in range(0, len(words), batch_size):
-        inputs, targets: Tuple[List[int], List[int]] = None, None
-        yield inputs, targets
+        
+        inputs, targets = [], []
+        batch: List[int] = words[idx : idx + batch_size]
+
+        for i, word in enumerate(batch):
+            target_words: List[str] = get_target(batch,i,window_size)
+            for target in target_words:
+                inputs.append(word)
+                targets.append(target)
+            
+        yield inputs,targets
+        
+
 
 def cosine_similarity(embedding: torch.nn.Embedding, valid_size: int = 16, valid_window: int = 100, device: str = 'cpu'):
     """Calculates the cosine similarity of validation words with words in the embedding matrix.
@@ -140,8 +168,15 @@ def cosine_similarity(embedding: torch.nn.Embedding, valid_size: int = 16, valid
         sim = (a . b) / |a||b| where `a` and `b` are embedding vectors.
     """
 
-    # TODO
-    valid_examples: torch.Tensor = None
-    similarities: torch.Tensor = None
+    valid_examples: torch.Tensor = torch.randint(0, valid_window, (valid_size,), dtype=torch.long, device=device)
+    
+    embed_weights: torch.nn.Embedding = embedding.weight  
+    valid_embeddings: torch.nn.Embedding = embed_weights[valid_examples]  
+    
+    dot_product: torch.Tensor = torch.matmul(valid_embeddings, embed_weights.T)  
+    norms: torch.Tensor = torch.norm(embed_weights, dim=1)  
+    valid_norms: torch.Tensor = torch.norm(valid_embeddings, dim=1, keepdim=True)  
+
+    similarities: torch.Tensor = dot_product / (valid_norms * norms)  
 
     return valid_examples, similarities
